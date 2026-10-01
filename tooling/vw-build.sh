@@ -22,6 +22,8 @@ PUSH_REGISTRY="$DEFAULT_PUSH_REGISTRY"
 BUILDER_IMAGE=""
 SKIP_ENVTEST="y"
 WORK_ROOT=""
+BUILD_GOOS="linux"
+BUILD_GOARCH="amd64"
 
 usage() {
   sed -n '2,30p' "$0" | sed 's/^# \?//'
@@ -39,6 +41,8 @@ usage() {
   echo "  --builder-image IMAGE         override golang builder image"
   echo "  --skip-envtest y|n            default y"
   echo "  --work-root DIR               build worktree parent"
+  echo "  --build-goos GOOS             default linux (installer target)"
+  echo "  --build-goarch GOARCH         default amd64"
   echo "  --dry-run"
   exit 1
 }
@@ -197,14 +201,13 @@ build_binary() {
   run podman cp vw-installer-extract:/usr/share/openshift/. "$extract_dir/openshift"
   run podman rm vw-installer-extract
 
-  local goos goarch
-  goos="$(uname -s | tr '[:upper:]' '[:lower:]')"
-  goarch="$(uname -m)"
-  [[ "$goarch" == "x86_64" ]] && goarch="amd64"
-  [[ "$goarch" == "aarch64" ]] && goarch="arm64"
+  local goos="$BUILD_GOOS"
+  local goarch="$BUILD_GOARCH"
   local bindir="${wt}/cluster-api/bin/${goos}_${goarch}"
   mkdir -p "$bindir"
-  if [[ -d "${extract_dir}/openshift/${goos}/${goarch}" ]]; then
+  if $DRY_RUN; then
+    log "Dry-run: would copy CAPI binaries from base image to ${bindir}"
+  elif [[ -d "${extract_dir}/openshift/${goos}/${goarch}" ]]; then
     cp -a "${extract_dir}/openshift/${goos}/${goarch}/." "$bindir/"
   elif [[ -d "${extract_dir}/openshift/linux/amd64" && "$goarch" == "amd64" ]]; then
     cp -a "${extract_dir}/openshift/linux/amd64/." "$bindir/"
@@ -226,6 +229,8 @@ build_binary() {
     -e BUILD_VERSION="${tag_version}" \
     -e SOURCE_GIT_COMMIT="${INSTALLER_COMMIT}" \
     -e GOTOOLCHAIN=auto \
+    -e GOOS="${BUILD_GOOS}" \
+    -e GOARCH="${BUILD_GOARCH}" \
     "$BUILDER_IMAGE" \
     bash -lc 'hack/build.sh && go test ./pkg/envtimeout/... && cp bin/openshift-install /out/openshift-install'
 
@@ -294,6 +299,8 @@ while [[ $# -gt 0 ]]; do
     --builder-image) BUILDER_IMAGE="$2"; shift 2 ;;
     --skip-envtest) SKIP_ENVTEST="$2"; shift 2 ;;
     --work-root) WORK_ROOT="$2"; shift 2 ;;
+    --build-goos) BUILD_GOOS="$2"; shift 2 ;;
+    --build-goarch) BUILD_GOARCH="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage ;;
     *) echo "unknown arg: $1"; usage ;;

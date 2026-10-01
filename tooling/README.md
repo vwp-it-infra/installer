@@ -6,7 +6,13 @@ This branch (`vw-tooling`) holds build/sync scripts only. Patched installer sour
 
 ## Prerequisites
 
-- Linux build host with `git`, `podman`, `jq`, and network to GitHub + JFrog (`pf34-docker.jfrog.devstack.vwgroup.com`). No quay.io required.
+- Linux **amd64** build host with `git`, `podman`, `jq`, and network to GitHub + JFrog (`pf34-docker.jfrog.devstack.vwgroup.com`). No quay.io required.
+- Registry login (do not commit credentials):
+
+  ```bash
+  podman login pf34-docker.jfrog.devstack.vwgroup.com -u '<your-user>' --password-stdin <<<"$JFROG_TOKEN"
+  # or: --authfile ~/.config/containers/auth.json
+  ```
 - Windows jumpbox with `oc` and access to the **mirrored** release image.
 - Fork clone with carrier branches pushed to `origin`.
 
