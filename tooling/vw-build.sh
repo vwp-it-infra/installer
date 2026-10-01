@@ -26,6 +26,8 @@ WORK_ROOT=""
 BUILD_GOOS="linux"
 BUILD_GOARCH="amd64"
 PODMAN_PLATFORM="linux/amd64"
+# Empty = auto (1 on macOS amd64 emulation, else Go default). Use --build-parallel to override.
+BUILD_GO_PARALLEL=""
 
 usage() {
   sed -n '2,30p' "$0" | sed 's/^# \?//'
@@ -45,6 +47,7 @@ usage() {
   echo "  --work-root DIR               build worktree parent"
   echo "  --build-goos GOOS             default linux (installer target)"
   echo "  --build-goarch GOARCH         default amd64"
+  echo "  --build-parallel N            GOMAXPROCS/GOFLAGS -p (default: 1 on macOS + linux/amd64)"
   echo "  --dry-run"
   exit 1
 }
@@ -56,6 +59,18 @@ podman_volume_suffix() {
   if [[ "$(uname -s)" == "Linux" ]]; then
     echo ":Z"
   fi
+}
+
+effective_build_parallel() {
+  if [[ -n "$BUILD_GO_PARALLEL" ]]; then
+    echo "$BUILD_GO_PARALLEL"
+    return
+  fi
+  if [[ "$(uname -s)" == "Darwin" && "${PODMAN_PLATFORM}" == "linux/amd64" ]]; then
+    echo "1"
+    return
+  fi
+  echo ""
 }
 
 abs_path() {
@@ -263,6 +278,13 @@ build_binary() {
   go_build_cache="$(abs_path "$go_build_cache")"
   local vol_suffix
   vol_suffix="$(podman_volume_suffix)"
+  local go_parallel
+  go_parallel="$(effective_build_parallel)"
+  local parallel_env=()
+  if [[ -n "$go_parallel" ]]; then
+    log "Go build parallelism: GOMAXPROCS=${go_parallel} (cmd/compile -p=${go_parallel})"
+    parallel_env=(-e "GOMAXPROCS=${go_parallel}" -e "GOFLAGS=-p=${go_parallel}")
+  fi
   # Go compile uses large temp dirs; Podman Desktop VM /tmp is often too small on macOS.
   run podman run --rm --platform "${PODMAN_PLATFORM}" \
     -v "${wt}:/src${vol_suffix}" \
@@ -279,6 +301,7 @@ build_binary() {
     -e GOCACHE=/go-build-cache/gocache \
     -e GOTMPDIR=/go-build-cache/tmp \
     -e TMPDIR=/go-build-cache/tmp \
+    "${parallel_env[@]}" \
     "$BUILDER_IMAGE" \
     bash -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends zip >/dev/null && hack/build.sh && go test ./pkg/envtimeout/... && cp bin/openshift-install /out/openshift-install'
 
@@ -351,6 +374,7 @@ while [[ $# -gt 0 ]]; do
     --work-root) WORK_ROOT="$2"; shift 2 ;;
     --build-goos) BUILD_GOOS="$2"; shift 2 ;;
     --build-goarch) BUILD_GOARCH="$2"; shift 2 ;;
+    --build-parallel) BUILD_GO_PARALLEL="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage ;;
     *) echo "unknown arg: $1"; usage ;;
