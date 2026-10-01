@@ -59,6 +59,13 @@ if [[ "$installer_ref" != *@sha256:* ]]; then
 fi
 installer_mirror="${REGISTRY_HOST}/openshift/release@${installer_ref#*@}"
 
+artifacts_ref="$(jq -r '.spec.tags[] | select(.name=="installer-artifacts") | .from.name' "$refs")"
+[[ -n "$artifacts_ref" && "$artifacts_ref" != null && "$artifacts_ref" == *@sha256:* ]] || {
+  echo "installer-artifacts image ref not found" >&2
+  exit 1
+}
+installer_artifacts_mirror="${REGISTRY_HOST}/openshift/release@${artifacts_ref#*@}"
+
 release_source="$(jq -r '.metadata.url // empty' "$meta")"
 if [[ -z "$release_source" ]]; then
   release_source="$RELEASE_IMAGE"
@@ -73,6 +80,7 @@ jq -n \
   --arg installerCommit "$installer_commit" \
   --arg installerImageSource "$installer_ref" \
   --arg installerImageMirror "$installer_mirror" \
+  --arg installerArtifactsImageMirror "$installer_artifacts_mirror" \
   '{
     schemaVersion: ($schemaVersion|tonumber),
     ocpVersion: $ocpVersion,
@@ -81,7 +89,8 @@ jq -n \
     installerSourceRepo: $installerSourceRepo,
     installerCommit: $installerCommit,
     installerImageSource: $installerImageSource,
-    installerImageMirror: $installerImageMirror
+    installerImageMirror: $installerImageMirror,
+    installerArtifactsImageMirror: $installerArtifactsImageMirror
   }' > "$OUTPUT"
 
 echo "Wrote $OUTPUT (OCP $version, installer $installer_commit)"

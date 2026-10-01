@@ -14,6 +14,7 @@ PARAMS_FILE=""
 OCP_VERSION=""
 INSTALLER_COMMIT=""
 INSTALLER_BASE_IMAGE=""
+INSTALLER_ARTIFACTS_IMAGE=""
 RELEASE_IMAGE_MIRROR=""
 PATCH_REVISION=""
 AUTHFILE=""
@@ -101,6 +102,7 @@ parse_params_file() {
   OCP_VERSION="$(jq -r '.ocpVersion' "$f")"
   INSTALLER_COMMIT="$(jq -r '.installerCommit' "$f")"
   INSTALLER_BASE_IMAGE="$(jq -r '.installerImageMirror' "$f")"
+  INSTALLER_ARTIFACTS_IMAGE="$(jq -r '.installerArtifactsImageMirror // .installerImageMirror' "$f")"
   RELEASE_IMAGE_MIRROR="$(jq -r '.releaseImageMirror' "$f")"
 }
 
@@ -195,15 +197,15 @@ build_binary() {
   local base_digest
   base_digest="$(digest_from_image_ref "$INSTALLER_BASE_IMAGE")"
 
-  log "Extracting cluster-api binaries from base installer image"
+  log "Extracting cluster-api binaries from installer-artifacts image"
   local extract_dir="${WORK_ROOT}/extract"
-  mkdir -p "$extract_dir"
+  mkdir -p "$extract_dir/openshift"
   local pull_args=(pull --platform "${PODMAN_PLATFORM}")
   [[ -n "$AUTHFILE" ]] && pull_args+=(--authfile "$AUTHFILE")
-  run podman "${pull_args[@]}" "${INSTALLER_BASE_IMAGE}"
+  run podman "${pull_args[@]}" "${INSTALLER_ARTIFACTS_IMAGE}"
   local extract_cname="vw-installer-extract-${OCP_VERSION//./-}-$$"
-  run podman create --platform "${PODMAN_PLATFORM}" --name "$extract_cname" "${INSTALLER_BASE_IMAGE}" >/dev/null
-  run podman cp "${extract_cname}:/usr/share/openshift/." "$extract_dir/openshift"
+  run podman create --platform "${PODMAN_PLATFORM}" --name "$extract_cname" "${INSTALLER_ARTIFACTS_IMAGE}" >/dev/null
+  run podman cp "${extract_cname}:/usr/share/openshift/." "$extract_dir/openshift/"
   run podman rm "$extract_cname"
 
   local goos="$BUILD_GOOS"
