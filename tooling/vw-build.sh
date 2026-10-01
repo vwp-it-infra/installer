@@ -256,14 +256,18 @@ build_binary() {
 
   log "Building openshift-install (${tag_version}) in ${BUILDER_IMAGE}"
   local artifact_dir="${WORK_ROOT}/image-context/artifacts"
-  mkdir -p "$artifact_dir"
+  local go_build_cache="${WORK_ROOT}/go-build-cache"
+  mkdir -p "$artifact_dir" "$go_build_cache/tmp" "$go_build_cache/gocache"
   wt="$(abs_path "$wt")"
   artifact_dir="$(abs_path "$artifact_dir")"
+  go_build_cache="$(abs_path "$go_build_cache")"
   local vol_suffix
   vol_suffix="$(podman_volume_suffix)"
+  # Go compile uses large temp dirs; Podman Desktop VM /tmp is often too small on macOS.
   run podman run --rm --platform "${PODMAN_PLATFORM}" \
     -v "${wt}:/src${vol_suffix}" \
     -v "${artifact_dir}:/out${vol_suffix}" \
+    -v "${go_build_cache}:/go-build-cache${vol_suffix}" \
     -w /src \
     -e CGO_ENABLED=0 \
     -e SKIP_ENVTEST="${SKIP_ENVTEST}" \
@@ -272,6 +276,9 @@ build_binary() {
     -e GOTOOLCHAIN=auto \
     -e GOOS="${BUILD_GOOS}" \
     -e GOARCH="${BUILD_GOARCH}" \
+    -e GOCACHE=/go-build-cache/gocache \
+    -e GOTMPDIR=/go-build-cache/tmp \
+    -e TMPDIR=/go-build-cache/tmp \
     "$BUILDER_IMAGE" \
     bash -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends zip >/dev/null && hack/build.sh && go test ./pkg/envtimeout/... && cp bin/openshift-install /out/openshift-install'
 

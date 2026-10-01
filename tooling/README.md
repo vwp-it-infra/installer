@@ -84,6 +84,7 @@ Dry-run:
 - **Podman volume format error on macOS:** ensure `prepare_source_tree` git output stays on stderr (worktree progress must not pollute the captured path).
 - **`go: not found` in builder:** use `bash -c` (not `bash -lc`) so the official `golang` image PATH is preserved.
 - **`zip: not found` in hack/build.sh:** `vw-build.sh` installs `zip` in the builder container before `hack/build.sh`; use a custom image from `Containerfile.builder` to avoid repeated `apt-get`.
+- **`no space left on device` during `go build`:** the Podman VM disk is full. `vw-build.sh` puts `GOCACHE`/`GOTMPDIR` on the host under `.vw-build/run.*/go-build-cache`. Also run `podman system prune -a` (careful), remove old `.vw-build/run.*` dirs, or grow the Podman machine disk in Podman Desktop settings (~40GB+ recommended for installer builds).
 - **Install still hits 15m:** confirm Hive provision pod env and image digest; search logs for `Using OPENSHIFT_INSTALL_`.
 
 ## Adding OpenShift 4.24+
