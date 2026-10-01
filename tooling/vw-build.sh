@@ -145,10 +145,19 @@ prepare_source_tree() {
   local carrier="${base}-timeout-patch"
   local wt="${WORK_ROOT}/src"
 
-  git -C "$INSTALLER_REPO" fetch origin "$base" "$carrier" tags
+  git -C "$INSTALLER_REPO" fetch origin "$base" "$carrier" tags 2>/dev/null || true
 
-  if ! git -C "$INSTALLER_REPO" merge-base --is-ancestor "$INSTALLER_COMMIT" "origin/${base}"; then
-    echo "error: installer commit $INSTALLER_COMMIT is not on origin/${base}" >&2
+  local base_ref="origin/${base}"
+  if ! git -C "$INSTALLER_REPO" rev-parse "$base_ref" &>/dev/null; then
+    base_ref="$base"
+  fi
+  local carrier_ref="origin/${carrier}"
+  if ! git -C "$INSTALLER_REPO" rev-parse "$carrier_ref" &>/dev/null; then
+    carrier_ref="$carrier"
+  fi
+
+  if ! git -C "$INSTALLER_REPO" merge-base --is-ancestor "$INSTALLER_COMMIT" "$base_ref"; then
+    echo "error: installer commit $INSTALLER_COMMIT is not on ${base_ref}" >&2
     exit 1
   fi
 
@@ -158,9 +167,9 @@ prepare_source_tree() {
   run git -C "$INSTALLER_REPO" worktree add --detach "$wt" "$INSTALLER_COMMIT"
 
   local patch_sha
-  patch_sha="$(git -C "$INSTALLER_REPO" rev-list -n 1 "origin/${carrier}" "^origin/${base}")"
+  patch_sha="$(git -C "$INSTALLER_REPO" rev-list -n 1 "${carrier_ref}" "^${base_ref}")"
   if [[ -z "$patch_sha" ]]; then
-    echo "error: no patch commit found on origin/${carrier} above origin/${base}" >&2
+    echo "error: no patch commit found on ${carrier_ref} above ${base_ref}" >&2
     exit 1
   fi
   if ! run git -C "$wt" cherry-pick "$patch_sha"; then
