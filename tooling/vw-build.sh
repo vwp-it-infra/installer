@@ -114,7 +114,8 @@ validate_inputs() {
     INSTALLER_REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
   fi
   if [[ -z "$WORK_ROOT" ]]; then
-    WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/vw-build.XXXXXX")"
+    mkdir -p "${INSTALLER_REPO}/.vw-build"
+    WORK_ROOT="$(mktemp -d "${INSTALLER_REPO}/.vw-build/run.XXXXXX")"
   fi
   local minor
   minor="$(minor_from_version "$OCP_VERSION")"
