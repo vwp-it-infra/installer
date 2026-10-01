@@ -35,6 +35,7 @@ import (
 	assetstore "github.com/openshift/installer/pkg/asset/store"
 	targetassets "github.com/openshift/installer/pkg/asset/targets"
 	destroybootstrap "github.com/openshift/installer/pkg/destroy/bootstrap"
+	"github.com/openshift/installer/pkg/envtimeout"
 	timer "github.com/openshift/installer/pkg/metrics/timer"
 	"github.com/openshift/installer/pkg/types/aws"
 	"github.com/openshift/installer/pkg/types/azure"
@@ -343,7 +344,7 @@ func waitForBootstrapComplete(ctx context.Context, config *rest.Config) *cluster
 
 	discovery := client.Discovery()
 
-	apiTimeout := 20 * time.Minute
+	apiTimeout := envtimeout.Duration("OPENSHIFT_INSTALL_API_TIMEOUT", 20*time.Minute)
 
 	untilTime := time.Now().Add(apiTimeout)
 	timezone, _ := untilTime.Zone()
@@ -416,6 +417,7 @@ func waitForBootstrapComplete(ctx context.Context, config *rest.Config) *cluster
 		timeout = 60 * time.Minute
 		logrus.Infof("Increasing bootstrapping timeout on AWS to %v since UserProvisionedDNS is enabled", timeout)
 	}
+	timeout = envtimeout.Duration("OPENSHIFT_INSTALL_BOOTSTRAP_TIMEOUT", timeout)
 
 	untilTime = time.Now().Add(timeout)
 	timezone, _ = untilTime.Zone()
