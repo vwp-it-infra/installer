@@ -1,13 +1,13 @@
 # Installer timeout environment variables (VW patch)
 
-The VW fork adds **opt-in** overrides to `openshift-install` on carrier branches `release-4.20-timeout-patch` … `release-4.23-timeout-patch`. The same text is shipped in-tree as [`pkg/envtimeout/README.md`](../pkg/envtimeout/README.md) on those branches (source template: [`pkg-envtimeout-README.md`](pkg-envtimeout-README.md)). Upstream defaults are unchanged unless you set variables on the install.
+This package implements **opt-in** duration overrides for `openshift-install`. Upstream defaults are unchanged unless you set environment variables on the install.
 
-You must run a **VW-built** installer image (see [README.md](README.md)) and set `spec.provisioning.installerImageOverride` on the Hive `ClusterDeployment`. Stock release installer images do not include this patch.
+Use a **VW-built** installer image from this fork (build scripts on git branch `vw-tooling`) and set `spec.provisioning.installerImageOverride` on the Hive `ClusterDeployment`. Stock release installer images do not include this patch.
 
 ## Value format
 
 - Go [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) strings, e.g. `20m`, `45m`, `1h`, `1h30m`.
-- Allowed range: greater than zero, at most **3 hours**.
+- Allowed range: greater than zero, at most **3 hours** (`MaxDuration` in code).
 - Invalid or empty values are ignored; the installer keeps the default for that phase and logs a warning.
 - When an override applies, logs contain: `Using OPENSHIFT_INSTALL_<NAME>=<value> (default …)`.
 
