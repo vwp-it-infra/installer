@@ -58,6 +58,20 @@ podman_volume_suffix() {
   fi
 }
 
+abs_path() {
+  local p="$1"
+  if [[ -d "$p" ]]; then
+    (cd "$p" && pwd)
+  elif [[ -f "$p" ]]; then
+    local dir
+    dir="$(dirname "$p")"
+    echo "$(cd "$dir" && pwd)/$(basename "$p")"
+  else
+    mkdir -p "$p"
+    (cd "$p" && pwd)
+  fi
+}
+
 run() {
   if $DRY_RUN; then
     echo "[dry-run] $*"
@@ -128,10 +142,12 @@ validate_inputs() {
   if [[ -z "$INSTALLER_REPO" ]]; then
     INSTALLER_REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
   fi
+  INSTALLER_REPO="$(abs_path "$INSTALLER_REPO")"
   if [[ -z "$WORK_ROOT" ]]; then
     mkdir -p "${INSTALLER_REPO}/.vw-build"
     WORK_ROOT="$(mktemp -d "${INSTALLER_REPO}/.vw-build/run.XXXXXX")"
   fi
+  WORK_ROOT="$(abs_path "$WORK_ROOT")"
   local minor
   minor="$(minor_from_version "$OCP_VERSION")"
   if [[ -z "$BUILDER_IMAGE" ]]; then
@@ -241,13 +257,14 @@ build_binary() {
   log "Building openshift-install (${tag_version}) in ${BUILDER_IMAGE}"
   local artifact_dir="${WORK_ROOT}/image-context/artifacts"
   mkdir -p "$artifact_dir"
-  local out_bin="${artifact_dir}/openshift-install"
+  wt="$(abs_path "$wt")"
+  artifact_dir="$(abs_path "$artifact_dir")"
   local vol_suffix
   vol_suffix="$(podman_volume_suffix)"
   run podman run --rm --platform "${PODMAN_PLATFORM}" \
-    -v "${wt}:/go/src/github.com/openshift/installer${vol_suffix}" \
+    -v "${wt}:/src${vol_suffix}" \
     -v "${artifact_dir}:/out${vol_suffix}" \
-    -w /go/src/github.com/openshift/installer \
+    -w /src \
     -e CGO_ENABLED=0 \
     -e SKIP_ENVTEST="${SKIP_ENVTEST}" \
     -e BUILD_VERSION="${tag_version}" \
