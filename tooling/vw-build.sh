@@ -198,9 +198,13 @@ build_binary() {
   log "Extracting cluster-api binaries from base installer image"
   local extract_dir="${WORK_ROOT}/extract"
   mkdir -p "$extract_dir"
-  run podman create --platform "${PODMAN_PLATFORM}" --name vw-installer-extract "${INSTALLER_BASE_IMAGE}" >/dev/null
-  run podman cp vw-installer-extract:/usr/share/openshift/. "$extract_dir/openshift"
-  run podman rm vw-installer-extract
+  local pull_args=(pull --platform "${PODMAN_PLATFORM}")
+  [[ -n "$AUTHFILE" ]] && pull_args+=(--authfile "$AUTHFILE")
+  run podman "${pull_args[@]}" "${INSTALLER_BASE_IMAGE}"
+  local extract_cname="vw-installer-extract-${OCP_VERSION//./-}-$$"
+  run podman create --platform "${PODMAN_PLATFORM}" --name "$extract_cname" "${INSTALLER_BASE_IMAGE}" >/dev/null
+  run podman cp "${extract_cname}:/usr/share/openshift/." "$extract_dir/openshift"
+  run podman rm "$extract_cname"
 
   local goos="$BUILD_GOOS"
   local goarch="$BUILD_GOARCH"

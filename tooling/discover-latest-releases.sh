@@ -6,16 +6,16 @@ REGISTRY="pf34-docker.jfrog.devstack.vwgroup.com"
 IMAGE="${REGISTRY}/openshift/release-images"
 AUTHFILE="${1:-}"
 
-skopeo_args=(list-tags "docker://${IMAGE}")
-[[ -n "$AUTHFILE" ]] && skopeo_args=(--authfile "$AUTHFILE" "${skopeo_args[@]}")
+auth_args=()
+[[ -n "$AUTHFILE" && -f "$AUTHFILE" ]] && auth_args=(--authfile "$AUTHFILE")
 
-tags_json="$(skopeo "${skopeo_args[@]}")"
+tags_json="$(skopeo list-tags "${auth_args[@]}" "docker://${IMAGE}")"
 for minor in 20 21 22 23; do
-  best="$(echo "$tags_json" | jq -r '.Tags[]' | grep -E "^4\\.${minor}\\.[0-9]+\$" | sort -V | tail -1 || true)"
+  best="$(echo "$tags_json" | jq -r '.Tags[]' | grep -E "^4\\.${minor}\\.[0-9]+" | sort -V | tail -1 || true)"
   if [[ -z "$best" ]]; then
-    echo "error: no tag found for 4.${minor}.x on ${IMAGE}" >&2
-    exit 1
+    echo "warn: no tag for 4.${minor}.x on ${IMAGE}; skipping" >&2
+    continue
   fi
-  digest="$(skopeo inspect "docker://${IMAGE}:${best}" ${AUTHFILE:+--authfile "$AUTHFILE"} | jq -r .Digest)"
+  digest="$(skopeo inspect "${auth_args[@]}" "docker://${IMAGE}:${best}" | jq -r .Digest)"
   echo "4.${minor} ${best} ${IMAGE}@${digest}"
 done

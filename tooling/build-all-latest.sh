@@ -17,6 +17,7 @@ params_dir="${INSTALLER_REPO}/.vw-build/params"
 mkdir -p "$params_dir"
 
 while read -r _minor tag release_ref; do
+  tag="${tag/-x86_64/}"
   params="${params_dir}/${tag}.json"
   echo "=== Params for ${tag} ==="
   "${SCRIPT_DIR}/extract-params.sh" --release-image "$release_ref" --output "$params" --authfile "$AUTHFILE"
