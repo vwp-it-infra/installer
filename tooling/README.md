@@ -76,7 +76,9 @@ Dry-run:
 ## Troubleshooting
 
 - **Cherry-pick failed:** payload commit may not match carrier base; re-sync carrier or bump patch revision.
-- **CAPI binary extract failed:** ensure `installerImageMirror` is digest-pinned and matches the payload.
+- **CAPI binary extract failed:** mirrored `installer-artifacts` often only ships `openshift-install` (no kube-apiserver/etcd). `vw-build.sh` continues with `SKIP_ENVTEST=y` and in-tree `make -C cluster-api all`.
+- **Podman volume format error on macOS:** ensure `prepare_source_tree` git output stays on stderr (worktree progress must not pollute the captured path).
+- **`go: not found` in builder:** use `bash -c` (not `bash -lc`) so the official `golang` image PATH is preserved.
 - **Install still hits 15m:** confirm Hive provision pod env and image digest; search logs for `Using OPENSHIFT_INSTALL_`.
 
 ## Adding OpenShift 4.24+
