@@ -68,15 +68,15 @@ minor_from_version() {
     echo "error: ocp version must match ${VERSION_RE}: $ver" >&2
     exit 1
   fi
-  echo "${BASH_REMATCH[1]}"
+  echo "4.${BASH_REMATCH[1]}"
 }
 
 default_builder_image() {
   local minor="$1"
   case "$minor" in
-    20|21) echo "docker.io/library/golang:1.24.5-bookworm" ;;
-    22) echo "docker.io/library/golang:1.25.8-bookworm" ;;
-    23) echo "docker.io/library/golang:1.26.0-bookworm" ;;
+    4.20|4.21) echo "docker.io/library/golang:1.24.5-bookworm" ;;
+    4.22) echo "docker.io/library/golang:1.25.8-bookworm" ;;
+    4.23) echo "docker.io/library/golang:1.26.0-bookworm" ;;
     *) echo "error: unsupported minor $minor" >&2; exit 1 ;;
   esac
 }
@@ -132,7 +132,7 @@ ensure_clean_repo() {
 
 patch_revision_from_carrier() {
   local minor="$1"
-  local carrier="release-${minor}-timeout-patch"
+  local carrier="release-${minor}-timeout-patch"  # minor is e.g. 4.21
   git -C "$INSTALLER_REPO" fetch origin "$carrier" 2>/dev/null || true
   local msg
   msg="$(git -C "$INSTALLER_REPO" log -1 --format=%B "origin/${carrier}" 2>/dev/null || git -C "$INSTALLER_REPO" log -1 --format=%B "$carrier")"
