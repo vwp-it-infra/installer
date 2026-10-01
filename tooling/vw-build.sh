@@ -164,7 +164,7 @@ prepare_source_tree() {
   if [[ -d "$wt" ]]; then
     git -C "$INSTALLER_REPO" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
   fi
-  run git -C "$INSTALLER_REPO" worktree add --detach "$wt" "$INSTALLER_COMMIT"
+  git -C "$INSTALLER_REPO" worktree add --detach "$wt" "$INSTALLER_COMMIT"
 
   local patch_sha
   patch_sha="$(git -C "$INSTALLER_REPO" rev-list -n 1 "${carrier_ref}" "^${base_ref}")"
@@ -172,7 +172,7 @@ prepare_source_tree() {
     echo "error: no patch commit found on ${carrier_ref} above ${base_ref}" >&2
     exit 1
   fi
-  if ! run git -C "$wt" cherry-pick "$patch_sha"; then
+  if ! git -C "$wt" cherry-pick "$patch_sha"; then
     echo "error: cherry-pick failed; fix patch for this z-stream commit" >&2
     exit 1
   fi
