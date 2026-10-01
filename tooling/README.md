@@ -34,7 +34,11 @@ This branch (`vw-tooling`) holds build/sync scripts only. Patched installer sour
 
 3. **Hive / ACM:** use printed `installerImageOverride` (by digest) and `installerEnv` on `ClusterDeployment.spec.provisioning`.
 
-## Environment variables (opt-in)
+## Timeout overrides (opt-in)
+
+Full reference: **[installer-timeout-env.md](installer-timeout-env.md)** — phase order, value format, Hive YAML, and VW defaults for the **15m provisioning** wall and slow bootstrap API VIP / keepalived (~20m).
+
+Summary:
 
 | Variable | Purpose |
 |----------|---------|
@@ -44,7 +48,7 @@ This branch (`vw-tooling`) holds build/sync scripts only. Patched installer sour
 | `OPENSHIFT_INSTALL_BOOTSTRAP_TIMEOUT` | Bootstrap complete (default 45m / 60m vSphere+baremetal) |
 | `OPENSHIFT_INSTALL_INSTALL_COMPLETE_TIMEOUT` | Cluster init **and** operator stability (defaults 40m/60m and 30m) |
 
-Invalid or unset values keep upstream defaults. Maximum override: **3h**.
+Invalid or unset values keep upstream defaults. Maximum override: **3h**. For slow provisioning, start with **45m** on network + machine provision and **30m** on API timeout (see linked doc).
 
 ## Sync carriers with upstream
 

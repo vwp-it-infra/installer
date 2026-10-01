@@ -322,6 +322,8 @@ spec:
       - name: OPENSHIFT_INSTALL_MACHINE_PROVISION_TIMEOUT
         value: "45m"
       - name: OPENSHIFT_INSTALL_NETWORK_TIMEOUT
+        value: "45m"
+      - name: OPENSHIFT_INSTALL_API_TIMEOUT
         value: "30m"
 EOF
 }
