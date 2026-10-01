@@ -197,30 +197,37 @@ build_binary() {
   local base_digest
   base_digest="$(digest_from_image_ref "$INSTALLER_BASE_IMAGE")"
 
-  log "Extracting cluster-api binaries from installer-artifacts image"
-  local extract_dir="${WORK_ROOT}/extract"
-  mkdir -p "$extract_dir/openshift"
-  local pull_args=(pull --platform "${PODMAN_PLATFORM}")
-  [[ -n "$AUTHFILE" ]] && pull_args+=(--authfile "$AUTHFILE")
-  run podman "${pull_args[@]}" "${INSTALLER_ARTIFACTS_IMAGE}"
-  local extract_cname="vw-installer-extract-${OCP_VERSION//./-}-$$"
-  run podman create --platform "${PODMAN_PLATFORM}" --name "$extract_cname" "${INSTALLER_ARTIFACTS_IMAGE}" >/dev/null
-  run podman cp "${extract_cname}:/usr/share/openshift/." "$extract_dir/openshift/"
-  run podman rm "$extract_cname"
-
   local goos="$BUILD_GOOS"
   local goarch="$BUILD_GOARCH"
   local bindir="${wt}/cluster-api/bin/${goos}_${goarch}"
-  mkdir -p "$bindir"
+  local extract_dir="${WORK_ROOT}/extract"
+  mkdir -p "$extract_dir/openshift" "$bindir"
+
+  local pull_args=(pull --platform "${PODMAN_PLATFORM}")
+  [[ -n "$AUTHFILE" ]] && pull_args+=(--authfile "$AUTHFILE")
+
+  if [[ -n "${INSTALLER_ARTIFACTS_IMAGE}" ]]; then
+    log "Inspecting installer-artifacts image for optional kube-apiserver/etcd deps"
+    run podman "${pull_args[@]}" "${INSTALLER_ARTIFACTS_IMAGE}"
+    if ! $DRY_RUN; then
+      local extract_cname="vw-installer-extract-${OCP_VERSION//./-}-$$"
+      run podman create --platform "${PODMAN_PLATFORM}" --name "$extract_cname" "${INSTALLER_ARTIFACTS_IMAGE}" >/dev/null
+      run podman cp "${extract_cname}:/usr/share/openshift/." "$extract_dir/openshift/" 2>/dev/null || true
+      run podman rm "$extract_cname"
+    fi
+  fi
+  log "Pulling runtime installer base image"
+  run podman "${pull_args[@]}" "${INSTALLER_BASE_IMAGE}"
   if $DRY_RUN; then
-    log "Dry-run: would copy CAPI binaries from base image to ${bindir}"
-  elif [[ -d "${extract_dir}/openshift/${goos}/${goarch}" ]]; then
+    log "Dry-run: would prepare cluster-api/bin at ${bindir}"
+  elif [[ -d "${extract_dir}/openshift/${goos}/${goarch}" ]] && [[ -f "${extract_dir}/openshift/${goos}/${goarch}/kube-apiserver" ]]; then
     cp -a "${extract_dir}/openshift/${goos}/${goarch}/." "$bindir/"
-  elif [[ -d "${extract_dir}/openshift/linux/amd64" && "$goarch" == "amd64" ]]; then
+    log "Copied kube-apiserver/etcd-style deps into ${bindir}"
+  elif [[ -d "${extract_dir}/openshift/linux/amd64" && "$goarch" == "amd64" && -f "${extract_dir}/openshift/linux/amd64/kube-apiserver" ]]; then
     cp -a "${extract_dir}/openshift/linux/amd64/." "$bindir/"
+    log "Copied kube-apiserver/etcd-style deps into ${bindir}"
   else
-    echo "error: could not find CAPI binaries for ${goos}/${goarch} in base image" >&2
-    exit 1
+    log "Payload installer-artifacts has no kube-apiserver (mirror layout); building with SKIP_ENVTEST=${SKIP_ENVTEST} and make -C cluster-api all"
   fi
 
   log "Building openshift-install (${tag_version}) in ${BUILDER_IMAGE}"
