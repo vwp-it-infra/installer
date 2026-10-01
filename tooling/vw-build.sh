@@ -24,6 +24,7 @@ SKIP_ENVTEST="y"
 WORK_ROOT=""
 BUILD_GOOS="linux"
 BUILD_GOARCH="amd64"
+PODMAN_PLATFORM="linux/amd64"
 
 usage() {
   sed -n '2,30p' "$0" | sed 's/^# \?//'
@@ -197,7 +198,7 @@ build_binary() {
   log "Extracting cluster-api binaries from base installer image"
   local extract_dir="${WORK_ROOT}/extract"
   mkdir -p "$extract_dir"
-  run podman create --name vw-installer-extract "${INSTALLER_BASE_IMAGE}" >/dev/null
+  run podman create --platform "${PODMAN_PLATFORM}" --name vw-installer-extract "${INSTALLER_BASE_IMAGE}" >/dev/null
   run podman cp vw-installer-extract:/usr/share/openshift/. "$extract_dir/openshift"
   run podman rm vw-installer-extract
 
@@ -220,7 +221,7 @@ build_binary() {
   local artifact_dir="${WORK_ROOT}/image-context/artifacts"
   mkdir -p "$artifact_dir"
   local out_bin="${artifact_dir}/openshift-install"
-  run podman run --rm \
+  run podman run --rm --platform "${PODMAN_PLATFORM}" \
     -v "${wt}:/go/src/github.com/openshift/installer:Z" \
     -v "${artifact_dir}:/out:Z" \
     -w /go/src/github.com/openshift/installer \
@@ -237,7 +238,7 @@ build_binary() {
   local image_tag="${PUSH_REGISTRY}:${OCP_VERSION}-tp.${PATCH_REVISION}"
   local containerfile="${SCRIPT_DIR}/Containerfile.installer"
   log "Building runtime image ${image_tag}"
-  run podman build \
+  run podman build --platform "${PODMAN_PLATFORM}" \
     -f "$containerfile" \
     --build-arg "BASE_IMAGE=${INSTALLER_BASE_IMAGE}" \
     --build-arg "OCP_VERSION=${OCP_VERSION}" \
@@ -252,14 +253,14 @@ build_binary() {
   if [[ -n "$AUTHFILE" ]]; then
     auth_args=(--authfile "$AUTHFILE")
   fi
-  run podman run --rm "$image_tag" openshift-install version
+  run podman run --rm --platform "${PODMAN_PLATFORM}" "$image_tag" openshift-install version
 
   if $DRY_RUN; then
     log "Dry-run: would push ${image_tag} and tag vw/v${OCP_VERSION}-tp.${PATCH_REVISION}"
     return 0
   fi
 
-  run podman push "${auth_args[@]}" "$image_tag"
+  run podman push --platform "${PODMAN_PLATFORM}" "${auth_args[@]}" "$image_tag"
   local pushed_digest
   pushed_digest="$(podman inspect --format='{{index .Digest}}' "$image_tag")"
 
