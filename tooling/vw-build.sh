@@ -50,6 +50,14 @@ usage() {
 }
 
 log() { echo "[vw-build] $*"; }
+
+# Podman on Linux accepts :Z for SELinux; macOS podman rejects it.
+podman_volume_suffix() {
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    echo ":Z"
+  fi
+}
+
 run() {
   if $DRY_RUN; then
     echo "[dry-run] $*"
@@ -234,9 +242,11 @@ build_binary() {
   local artifact_dir="${WORK_ROOT}/image-context/artifacts"
   mkdir -p "$artifact_dir"
   local out_bin="${artifact_dir}/openshift-install"
+  local vol_suffix
+  vol_suffix="$(podman_volume_suffix)"
   run podman run --rm --platform "${PODMAN_PLATFORM}" \
-    -v "${wt}:/go/src/github.com/openshift/installer:Z" \
-    -v "${artifact_dir}:/out:Z" \
+    -v "${wt}:/go/src/github.com/openshift/installer${vol_suffix}" \
+    -v "${artifact_dir}:/out${vol_suffix}" \
     -w /go/src/github.com/openshift/installer \
     -e CGO_ENABLED=0 \
     -e SKIP_ENVTEST="${SKIP_ENVTEST}" \
