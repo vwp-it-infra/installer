@@ -1,0 +1,20 @@
+# Runtime image: upstream mirrored installer with only openshift-install replaced.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ARG OCP_VERSION
+ARG PATCH_REVISION
+ARG INSTALLER_COMMIT
+ARG RELEASE_DIGEST
+ARG BASE_DIGEST
+
+LABEL org.opencontainers.image.title="openshift-install-vw-timeout-patch"
+LABEL org.opencontainers.image.version="${OCP_VERSION}-tp.${PATCH_REVISION}"
+LABEL vw.upstream.installer.commit="${INSTALLER_COMMIT}"
+LABEL vw.patch.revision="${PATCH_REVISION}"
+LABEL vw.ocp.version="${OCP_VERSION}"
+LABEL vw.release.digest="${RELEASE_DIGEST}"
+LABEL vw.base.installer.digest="${BASE_DIGEST}"
+
+COPY artifacts/openshift-install /bin/openshift-install
+RUN chmod 755 /bin/openshift-install

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "ocpVersion": "4.21.34",
+  "releaseImageSource": "quay.io/openshift-release-dev/ocp-release@sha256:c4d448adf37a2563f777b0f2777a89142b3d8f378e28faedf6c312e2957dc1b9",
+  "releaseImageMirror": "pf34-docker.jfrog.devstack.vwgroup.com/openshift/release-images@sha256:c4d448adf37a2563f777b0f2777a89142b3d8f378e28faedf6c312e2957dc1b9",
+  "installerSourceRepo": "https://github.com/openshift/installer",
+  "installerCommit": "0000000000000000000000000000000000000000",
+  "installerImageSource": "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "installerImageMirror": "pf34-docker.jfrog.devstack.vwgroup.com/openshift/release@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+}
