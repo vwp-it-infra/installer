@@ -32,6 +32,7 @@ import (
 	"github.com/openshift/installer/pkg/asset"
 	"github.com/openshift/installer/pkg/asset/agent/agentconfig"
 	"github.com/openshift/installer/pkg/asset/installconfig"
+	"github.com/openshift/installer/pkg/envtimeout"
 	timer "github.com/openshift/installer/pkg/metrics/timer"
 	"github.com/openshift/installer/pkg/types/baremetal"
 	cov1helpers "github.com/openshift/library-go/pkg/config/clusteroperator/v1helpers"
@@ -95,6 +96,7 @@ func waitForInitializedCluster(ctx context.Context, config *rest.Config, assetst
 			timeout = 60 * time.Minute
 		}
 	}
+	timeout = envtimeout.Duration("OPENSHIFT_INSTALL_INSTALL_COMPLETE_TIMEOUT", timeout)
 
 	untilTime := time.Now().Add(timeout)
 	timezone, _ := untilTime.Zone()
@@ -165,7 +167,7 @@ func waitForInitializedCluster(ctx context.Context, config *rest.Config, assetst
 func waitForStableOperators(ctx context.Context, config *rest.Config) error {
 	timer.StartTimer("Cluster Operators Stable")
 
-	stabilityCheckDuration := 30 * time.Minute
+	stabilityCheckDuration := envtimeout.Duration("OPENSHIFT_INSTALL_INSTALL_COMPLETE_TIMEOUT", 30*time.Minute)
 	stabilityContext, cancel := context.WithTimeout(ctx, stabilityCheckDuration)
 	defer cancel()
 

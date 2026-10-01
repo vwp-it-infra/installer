@@ -36,6 +36,7 @@ import (
 	"github.com/openshift/installer/pkg/asset/rhcos"
 	"github.com/openshift/installer/pkg/asset/tls"
 	"github.com/openshift/installer/pkg/clusterapi"
+	"github.com/openshift/installer/pkg/envtimeout"
 	"github.com/openshift/installer/pkg/infrastructure"
 	"github.com/openshift/installer/pkg/metrics/timer"
 	"github.com/openshift/installer/pkg/types"
@@ -213,6 +214,7 @@ func (i *InfraProvider) Provision(ctx context.Context, dir string, parents asset
 	if p, ok := i.impl.(Timeouts); ok {
 		networkTimeout = p.NetworkTimeout()
 	}
+	networkTimeout = envtimeout.Duration("OPENSHIFT_INSTALL_NETWORK_TIMEOUT", networkTimeout)
 
 	// Wait for successful provisioning by checking the InfrastructureReady
 	// status on the cluster object.
@@ -338,6 +340,7 @@ func (i *InfraProvider) Provision(ctx context.Context, dir string, parents asset
 	if p, ok := i.impl.(Timeouts); ok {
 		provisionTimeout = p.ProvisionTimeout()
 	}
+	provisionTimeout = envtimeout.Duration("OPENSHIFT_INSTALL_MACHINE_PROVISION_TIMEOUT", provisionTimeout)
 
 	{
 		untilTime := time.Now().Add(provisionTimeout)
