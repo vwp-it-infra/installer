@@ -273,7 +273,7 @@ build_binary() {
     -e GOOS="${BUILD_GOOS}" \
     -e GOARCH="${BUILD_GOARCH}" \
     "$BUILDER_IMAGE" \
-    bash -c 'hack/build.sh && go test ./pkg/envtimeout/... && cp bin/openshift-install /out/openshift-install'
+    bash -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends zip >/dev/null && hack/build.sh && go test ./pkg/envtimeout/... && cp bin/openshift-install /out/openshift-install'
 
   local image_tag="${PUSH_REGISTRY}:${OCP_VERSION}-tp.${PATCH_REVISION}"
   local containerfile="${SCRIPT_DIR}/Containerfile.installer"
