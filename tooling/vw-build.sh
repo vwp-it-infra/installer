@@ -330,7 +330,7 @@ build_binary() {
     return 0
   fi
 
-  run podman push --platform "${PODMAN_PLATFORM}" "${auth_args[@]}" "$image_tag"
+  run podman push "${auth_args[@]}" "$image_tag"
   local pushed_digest
   pushed_digest="$(podman inspect --format='{{index .Digest}}' "$image_tag")"
 
