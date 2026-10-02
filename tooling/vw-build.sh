@@ -323,7 +323,7 @@ build_binary() {
   if [[ -n "$AUTHFILE" ]]; then
     auth_args=(--authfile "$AUTHFILE")
   fi
-  run podman run --rm --platform "${PODMAN_PLATFORM}" "$image_tag" openshift-install version
+  run podman run --rm --platform "${PODMAN_PLATFORM}" --entrypoint /bin/openshift-install "$image_tag" version
 
   if $DRY_RUN; then
     log "Dry-run: would push ${image_tag} and tag vw/v${OCP_VERSION}-tp.${PATCH_REVISION}"

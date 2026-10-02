@@ -18,3 +18,4 @@ LABEL vw.release.digest="${RELEASE_DIGEST}"
 LABEL vw.base.installer.digest="${BASE_DIGEST}"
 
 COPY --chmod=755 artifacts/openshift-install /bin/openshift-install
+ENTRYPOINT ["/bin/openshift-install"]
