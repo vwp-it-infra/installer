@@ -86,6 +86,7 @@ Dry-run:
 - **`zip: not found` in hack/build.sh:** `vw-build.sh` installs `zip` in the builder container before `hack/build.sh`; use a custom image from `Containerfile.builder` to avoid repeated `apt-get`.
 - **`no space left on device` during `go build`:** the Podman VM disk is full. `vw-build.sh` puts `GOCACHE`/`GOTMPDIR` on the host under `.vw-build/run.*/go-build-cache`. Also run `podman system prune -a` (careful), remove old `.vw-build/run.*` dirs, or grow the Podman machine disk in Podman Desktop settings (~40GB+ recommended for installer builds).
 - **`cmd/compile` SIGSEGV / fatal error: fault on macOS:** amd64-in-QEMU builds are fragile. `vw-build.sh` defaults to `GOMAXPROCS=1` and `-p=1` on Darwin; retry once, give Podman **8GB+ RAM**, or run the same script on a native **linux/amd64** host/CI.
+- **`chmod: Operation not permitted` on runtime image:** the mirrored `openshift/release` base may run as non-root; `Containerfile.installer` uses `USER root` and `COPY --chmod=755`.
 - **Install still hits 15m:** confirm Hive provision pod env and image digest; search logs for `Using OPENSHIFT_INSTALL_`.
 
 ## Adding OpenShift 4.24+

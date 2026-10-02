@@ -1,6 +1,7 @@
 # Runtime image: upstream mirrored installer with only openshift-install replaced.
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
+USER root
 
 ARG OCP_VERSION
 ARG PATCH_REVISION
@@ -16,5 +17,4 @@ LABEL vw.ocp.version="${OCP_VERSION}"
 LABEL vw.release.digest="${RELEASE_DIGEST}"
 LABEL vw.base.installer.digest="${BASE_DIGEST}"
 
-COPY artifacts/openshift-install /bin/openshift-install
-RUN chmod 755 /bin/openshift-install
+COPY --chmod=755 artifacts/openshift-install /bin/openshift-install
