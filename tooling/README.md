@@ -16,6 +16,84 @@ This branch (`vw-tooling`) holds build/sync scripts only. Patched installer sour
 - Windows jumpbox with `oc` and access to the **mirrored** release image.
 - Fork clone with carrier branches pushed to `origin`.
 
+## Mirror a release to JFrog from macOS
+
+Use [mirror-release.sh](mirror-release.sh) to mirror a complete OpenShift release
+with **oc-mirror v2 inside Podman**. It does not configure or install a cluster,
+mirror additional Operator catalogs, build the patched installer, or push Git tags.
+The default is **4.22.20 / amd64** to
+`vwpinf-docker.jfrog.devstack.vwgroup.com`.
+
+Prerequisites:
+
+- Podman with an existing, running machine on macOS, plus `jq`.
+- Access to the Red Hat/Quay source registries, the OpenShift release graph and
+  downloads, UBI package repositories, and the destination JFrog registry.
+- Permission to push images into the destination registry's repository paths.
+- A **separate mirroring auth JSON file outside Git**, initially copied from your
+  Red Hat pull secret. Add JFrog credentials to that copy interactively:
+
+  ```bash
+  chmod 600 "$HOME/.config/containers/mirror-auth.json"
+  podman login --authfile "$HOME/.config/containers/mirror-auth.json" \
+    vwpinf-docker.jfrog.devstack.vwgroup.com
+  ```
+
+The file must contain `auths` entries for `quay.io` and the destination registry;
+keep it outside the workspace and keep the other Red Hat entries from the pull
+secret. Credential helpers from the
+macOS keychain are not a substitute for credentials accessible inside the Linux
+container. Do not use this push-capable auth file as a cluster pull secret.
+
+From the installer repository root, preview the selected release and architecture:
+
+```bash
+bash tooling/mirror-release.sh \
+  --release 4.22.20 \
+  --arch amd64 \
+  --authfile "$HOME/.config/containers/mirror-auth.json" \
+  --dry-run
+```
+
+Remove `--dry-run` to upload the images. To choose another release or architecture,
+change `--release` and `--arch`; accepted architectures are `amd64`, `arm64`,
+`ppc64le`, `s390x`, and `multi`. The selected release must exist in its
+`stable-4.MINOR` channel. The tool runs natively in an arm64 or amd64 Podman VM,
+independently of the architecture being mirrored, so an Apple Silicon Mac can
+mirror an amd64 release without emulating an amd64 tool.
+
+Use `--registry HOST[:PORT]` for another destination or `--work-dir DIR` for a
+different persistent workspace. By default, state is kept in the ignored
+`.vw-build/mirror/HOST/VERSION-ARCH/` directory. Reuse the same workspace to retry;
+the script rejects a workspace for a different release, architecture or registry.
+It never creates or starts a Podman VM and mounts the credentials read-only.
+
+The [runner Containerfile](Containerfile.oc-mirror) builds a local UBI9 image with
+the latest available RHEL9 oc-mirror binary for the selected release minor,
+verified against Red Hat's published SHA-256 checksum. Builds are cached by
+Podman. Even `--dry-run` can download the runner and query remote metadata, but it
+does not upload release payloads. Normal mode copies the **whole selected
+release**, not just the three inputs needed for an installer build.
+
+When run in a terminal, the script enables oc-mirror's native per-image spinners
+and overall image-count progress bar, including elapsed time and percentage.
+This measures images processed, not bytes uploaded. Redirected output stays in
+plain log format; `--dry-run` does not transfer images.
+
+Inspect the mappings and generated resources in the workspace's `working-dir`.
+**Do not assume the generated destination paths match the existing build
+scripts**: `extract-params.sh`, `vw-build.sh`, and the other original helpers still
+target `pf34-docker` and their existing repository layout. Adapt those separately
+before building an installer from this mirror.
+
+Safe local wrapper tests (no registry access):
+
+```bash
+bash tooling/tests/mirror-release-test.sh
+```
+
+Reference: [OpenShift 4.22 oc-mirror v2 documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/disconnected_environments/about-installing-oc-mirror-v2).
+
 ## End-to-end flow
 
 1. **Jumpbox (PowerShell):** extract params from mirrored release:

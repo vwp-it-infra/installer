@@ -1,0 +1,28 @@
+FROM registry.access.redhat.com/ubi9/ubi:latest
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN dnf install -y --setopt=install_weak_deps=False \
+      tar gzip gpgme containers-common \
+    && dnf clean all
+
+ARG OCP_MINOR=4.22
+RUN set -eu; \
+    case "$(uname -m)" in \
+      x86_64) archive_arch=x86_64 ;; \
+      aarch64) archive_arch=aarch64 ;; \
+      *) echo "Unsupported runner architecture: $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    url="https://mirror.openshift.com/pub/openshift-v4/${archive_arch}/clients/ocp/latest-${OCP_MINOR}"; \
+    curl --fail --location --retry 3 "$url/oc-mirror.rhel9.tar.gz" -o /tmp/oc-mirror.tar.gz; \
+    curl --fail --location --retry 3 "$url/sha256sum.txt" -o /tmp/oc-mirror-checksums; \
+    awk '$2 == "oc-mirror.rhel9.tar.gz" || $2 == "*oc-mirror.rhel9.tar.gz" \
+      { print $1 "  /tmp/oc-mirror.tar.gz"; found=1 } END { if (!found) exit 1 }' \
+      /tmp/oc-mirror-checksums | sha256sum --check -; \
+    tar -xzf /tmp/oc-mirror.tar.gz -C /usr/local/bin oc-mirror; \
+    chmod 0755 /usr/local/bin/oc-mirror; \
+    rm /tmp/oc-mirror.tar.gz /tmp/oc-mirror-checksums; \
+    oc-mirror --v2 --help >/dev/null
+
+ENV HOME=/work
+WORKDIR /work
+ENTRYPOINT ["/usr/local/bin/oc-mirror"]
