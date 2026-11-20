@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync upstream release branches and rebase VW timeout-patch carriers.
+# Sync upstream release branches and rebase VW installer patch carriers.
 set -euo pipefail
 
 usage() {
@@ -47,18 +47,19 @@ sync_one() {
     git push --force-with-lease origin "$carrier"
   fi
 
-  local count
-  count="$(git log --format=%B "${base}..${carrier}" | grep -c 'VW-Patch: timeout-overrides' || true)"
-  if [[ "$count" != "1" ]]; then
-    echo "error: expected exactly one VW-Patch commit on ${carrier}, found ${count}" >&2
+  local timeout_count auth_count commits
+  timeout_count="$(git log --format=%B "${base}..${carrier}" | grep -c '^VW-Patch: timeout-overrides$' || true)"
+  auth_count="$(git log --format=%B "${base}..${carrier}" | grep -c '^VW-Patch: rhcos-download-auth$' || true)"
+  if [[ "$timeout_count" != "1" || "$auth_count" -gt 1 ]]; then
+    echo "error: expected one timeout patch and at most one RHCOS auth patch on ${carrier}" >&2
     exit 1
   fi
   commits="$(git rev-list --count "${base}..${carrier}")"
-  if [[ "$commits" != "1" ]]; then
-    echo "error: expected 1 commit on ${carrier}, found ${commits}" >&2
+  if [[ "$commits" != "$((timeout_count + auth_count))" ]]; then
+    echo "error: unexpected unlabelled patch commits on ${carrier}" >&2
     exit 1
   fi
-  echo "OK ${carrier} is ${base} + 1 patch commit"
+  echo "OK ${carrier} is ${base} + ${commits} patch commits"
 }
 
 case "$TARGET" in

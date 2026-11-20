@@ -28,6 +28,7 @@ BUILD_GOARCH="amd64"
 PODMAN_PLATFORM="linux/amd64"
 # Empty = auto (1 on macOS amd64 emulation, else Go default). Use --build-parallel to override.
 BUILD_GO_PARALLEL=""
+CARRIER_REF=""
 
 usage() {
   sed -n '2,30p' "$0" | sed 's/^# \?//'
@@ -48,6 +49,7 @@ usage() {
   echo "  --build-goos GOOS             default linux (installer target)"
   echo "  --build-goarch GOARCH         default amd64"
   echo "  --build-parallel N            GOMAXPROCS/GOFLAGS -p (default: 1 on macOS + linux/amd64)"
+  echo "  --carrier-ref REF             override carrier Git ref (e.g. a local carrier branch)"
   echo "  --dry-run"
   exit 1
 }
@@ -158,6 +160,12 @@ validate_inputs() {
     INSTALLER_REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
   fi
   INSTALLER_REPO="$(abs_path "$INSTALLER_REPO")"
+  if [[ -n "$CARRIER_REF" ]]; then
+    CARRIER_REF="$(git -C "$INSTALLER_REPO" rev-parse --verify --end-of-options "${CARRIER_REF}^{commit}")" || {
+      echo "error: carrier ref must resolve to a commit" >&2
+      exit 1
+    }
+  fi
   if [[ -z "$WORK_ROOT" ]]; then
     mkdir -p "${INSTALLER_REPO}/.vw-build"
     WORK_ROOT="$(mktemp -d "${INSTALLER_REPO}/.vw-build/run.XXXXXX")"
@@ -180,9 +188,15 @@ ensure_clean_repo() {
 patch_revision_from_carrier() {
   local minor="$1"
   local carrier="release-${minor}-timeout-patch"  # minor is e.g. 4.21
-  git -C "$INSTALLER_REPO" fetch origin "$carrier" 2>/dev/null || true
+  if [[ -z "$CARRIER_REF" ]]; then
+    git -C "$INSTALLER_REPO" fetch origin "$carrier" 2>/dev/null || true
+  fi
   local msg
-  msg="$(git -C "$INSTALLER_REPO" log -1 --format=%B "origin/${carrier}" 2>/dev/null || git -C "$INSTALLER_REPO" log -1 --format=%B "$carrier")"
+  if [[ -n "$CARRIER_REF" ]]; then
+    msg="$(git -C "$INSTALLER_REPO" log -1 --format=%B "$CARRIER_REF")"
+  else
+    msg="$(git -C "$INSTALLER_REPO" log -1 --format=%B "origin/${carrier}" 2>/dev/null || git -C "$INSTALLER_REPO" log -1 --format=%B "$carrier")"
+  fi
   echo "$msg" | awk -F': ' '/^VW-Patch-Revision:/{print $2; exit}'
 }
 
@@ -198,7 +212,7 @@ prepare_source_tree() {
   if ! git -C "$INSTALLER_REPO" rev-parse "$base_ref" &>/dev/null; then
     base_ref="$base"
   fi
-  local carrier_ref="origin/${carrier}"
+  local carrier_ref="${CARRIER_REF:-origin/${carrier}}"
   if ! git -C "$INSTALLER_REPO" rev-parse "$carrier_ref" &>/dev/null; then
     carrier_ref="$carrier"
   fi
@@ -213,16 +227,19 @@ prepare_source_tree() {
   fi
   git -C "$INSTALLER_REPO" worktree add --detach "$wt" "$INSTALLER_COMMIT" >&2
 
+  local patch_shas
+  patch_shas="$(git -C "$INSTALLER_REPO" rev-list --reverse "${carrier_ref}" "^${base_ref}")"
+  if [[ -z "$patch_shas" ]]; then
+    echo "error: no patch commits found on ${carrier_ref} above ${base_ref}" >&2
+    exit 1
+  fi
   local patch_sha
-  patch_sha="$(git -C "$INSTALLER_REPO" rev-list -n 1 "${carrier_ref}" "^${base_ref}")"
-  if [[ -z "$patch_sha" ]]; then
-    echo "error: no patch commit found on ${carrier_ref} above ${base_ref}" >&2
-    exit 1
-  fi
-  if ! git -C "$wt" cherry-pick "$patch_sha" >&2; then
-    echo "error: cherry-pick failed; fix patch for this z-stream commit" >&2
-    exit 1
-  fi
+  while IFS= read -r patch_sha; do
+    if ! git -C "$wt" cherry-pick "$patch_sha" >&2; then
+      echo "error: cherry-pick failed; fix patch ${patch_sha} for this z-stream commit" >&2
+      exit 1
+    fi
+  done <<< "$patch_shas"
   if ! git -C "$wt" grep -q 'package envtimeout' pkg/envtimeout/duration.go 2>/dev/null; then
     echo "error: patched tree missing pkg/envtimeout" >&2
     exit 1
@@ -303,7 +320,7 @@ build_binary() {
     -e TMPDIR=/go-build-cache/tmp \
     "${parallel_env[@]}" \
     "$BUILDER_IMAGE" \
-    bash -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends zip >/dev/null && hack/build.sh && go test ./pkg/envtimeout/... && cp bin/openshift-install /out/openshift-install'
+    bash -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends zip >/dev/null && hack/build.sh && go test ./pkg/envtimeout/... ./pkg/rhcos/cache/... && cp bin/openshift-install /out/openshift-install'
 
   local image_tag="${PUSH_REGISTRY}:${OCP_VERSION}-tp.${PATCH_REVISION}"
   local containerfile="${SCRIPT_DIR}/Containerfile.installer"
@@ -375,6 +392,7 @@ while [[ $# -gt 0 ]]; do
     --build-goos) BUILD_GOOS="$2"; shift 2 ;;
     --build-goarch) BUILD_GOARCH="$2"; shift 2 ;;
     --build-parallel) BUILD_GO_PARALLEL="$2"; shift 2 ;;
+    --carrier-ref) CARRIER_REF="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage ;;
     *) echo "unknown arg: $1"; usage ;;

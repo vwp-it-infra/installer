@@ -1,6 +1,9 @@
-# VW OpenShift installer timeout patch — tooling
+# VW OpenShift installer patch tooling
 
-This branch (`vw-tooling`) holds build/sync scripts only. Patched installer source lives on carrier branches `release-4.x-timeout-patch` in the same fork.
+The `vw-tooling` branch holds build and sync scripts. Patched installer source lives
+on `release-<OCP_MINOR>-timeout-patch` carrier branches in the same fork.
+`<OCP_MINOR>` means the OpenShift major/minor release; `<OCP_VERSION>` means the full
+release version. Replace placeholders in the commands below with your selected values.
 
 **Warning:** A custom `openshift-install` image is **not supported by Red Hat**. Longer timeouts do not fix slow bootstrap root causes (mirror auth, quay.io fallback, vSphere performance). Check bootstrap logs before relying on overrides.
 
@@ -21,8 +24,8 @@ This branch (`vw-tooling`) holds build/sync scripts only. Patched installer sour
 Use [mirror-release.sh](mirror-release.sh) to mirror a complete OpenShift release
 with **oc-mirror v2 inside Podman**. It does not configure or install a cluster,
 mirror additional Operator catalogs, build the patched installer, or push Git tags.
-The default is **4.22.20 / amd64** to
-`vwpinf-docker.jfrog.devstack.vwgroup.com`.
+Pass the release, architecture and registry explicitly when preparing a build.
+Use the script's `--help` output to inspect its current defaults.
 
 Prerequisites:
 
@@ -49,8 +52,9 @@ From the installer repository root, preview the selected release and architectur
 
 ```bash
 bash tooling/mirror-release.sh \
-  --release 4.22.20 \
-  --arch amd64 \
+  --release "<OCP_VERSION>" \
+  --arch "<ARCH>" \
+  --registry "<REGISTRY_HOST>" \
   --authfile "$HOME/.config/containers/mirror-auth.json" \
   --dry-run
 ```
@@ -58,7 +62,7 @@ bash tooling/mirror-release.sh \
 Remove `--dry-run` to upload the images. To choose another release or architecture,
 change `--release` and `--arch`; accepted architectures are `amd64`, `arm64`,
 `ppc64le`, `s390x`, and `multi`. The selected release must exist in its
-`stable-4.MINOR` channel. The tool runs natively in an arm64 or amd64 Podman VM,
+`stable-<OCP_MINOR>` channel. The tool runs natively in an arm64 or amd64 Podman VM,
 independently of the architecture being mirrored, so an Apple Silicon Mac can
 mirror an amd64 release without emulating an amd64 tool.
 
@@ -68,8 +72,8 @@ different persistent workspace. By default, state is kept in the ignored
 the script rejects a workspace for a different release, architecture or registry.
 It never creates or starts a Podman VM and mounts the credentials read-only.
 
-The [runner Containerfile](Containerfile.oc-mirror) builds a local UBI9 image with
-the latest available RHEL9 oc-mirror binary for the selected release minor,
+The [runner Containerfile](Containerfile.oc-mirror) builds a local UBI image with
+the latest available RHEL oc-mirror binary for the selected release minor,
 verified against Red Hat's published SHA-256 checksum. Builds are cached by
 Podman. Even `--dry-run` can download the runner and query remote metadata, but it
 does not upload release payloads. Normal mode copies the **whole selected
@@ -92,29 +96,80 @@ Safe local wrapper tests (no registry access):
 bash tooling/tests/mirror-release-test.sh
 ```
 
-Reference: [OpenShift 4.22 oc-mirror v2 documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/disconnected_environments/about-installing-oc-mirror-v2).
+Reference: [OpenShift documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/).
+Select your release and its oc-mirror v2 documentation.
 
-## End-to-end flow
+## Prepare and build a release
 
-1. **Jumpbox (PowerShell):** extract params from mirrored release:
+1. Choose the full OpenShift release and target architecture, then mirror that
+   release. Use the generated mappings to identify the release, installer and
+   installer-artifacts images in the destination registry.
+
+2. Prepare the matching `release-<OCP_MINOR>-timeout-patch` carrier. Keep the
+   timeout patch as a labelled commit and include the RHCOS authentication commit
+   if private OVA downloads are required. Sync the carrier with upstream and
+   resolve any conflicts before building.
+
+   Patch commits use `VW-Patch: timeout-overrides` or
+   `VW-Patch: rhcos-download-auth`. Put `VW-Patch-Revision: <PATCH_REVISION>` in the
+   latest patch commit's message and increment it when changing the patch set.
+   The sync helper accepts one timeout commit and an optional authentication commit.
+
+3. Extract build parameters from the digest-pinned mirrored release. From the
+   installer repository root, on a PowerShell jumpbox:
 
    ```powershell
-   .\Get-InstallerBuildParams.ps1 `
-     -ReleaseImageMirror "pf34-docker.jfrog.devstack.vwgroup.com/openshift/release-images@sha256:…" `
+   .\tooling\Get-InstallerBuildParams.ps1 `
+     -ReleaseImageMirror "<MIRRORED_RELEASE_REPOSITORY>@sha256:<RELEASE_DIGEST>" `
      -OutputPath installer-build-params.json
    ```
 
-2. **Build host:** copy `installer-build-params.json`, run:
+   The parameter file identifies the exact payload `installerCommit` and mirrored
+   build inputs. Do not substitute the current head of the upstream release branch.
+   Check that the referenced installer images match the selected release.
+
+4. Copy the parameter file to the build host and choose a new image revision.
+   The default comes from the latest carrier commit's `VW-Patch-Revision`; use
+   `--patch-revision` to select another unused revision. The image name is
+   `openshift/installer:<OCP_VERSION>-tp.<PATCH_REVISION>`.
+
+   Review the helper's registry settings before running it. The legacy helpers
+   target `pf34-docker`; `--push-registry` changes the output repository but does
+   not change the mirror-host validation for input images.
+
+   Preview the build commands from the installer repository root:
 
    ```bash
-   ./vw-build.sh --params-file installer-build-params.json --authfile ~/.config/containers/auth.json
+   bash tooling/vw-build.sh \
+     --params-file installer-build-params.json \
+     --authfile "$HOME/.config/containers/auth.json" \
+     --dry-run
    ```
 
-3. **Hive / ACM:** use printed `installerImageOverride` (by digest) and `installerEnv` on `ClusterDeployment.spec.provisioning`.
+   Build-helper dry-run still fetches Git refs, creates a source worktree and
+   cherry-picks commits. It skips container build/run/push commands and Git tag
+   publication, so it is not a read-only repository check.
+
+5. Remove `--dry-run` when ready to build and publish. The helper checks out the
+   exact payload commit, cherry-picks all carrier commits in order, compiles
+   `openshift-install` and replaces the binary in the matching original installer
+   image. It runs the timeout and RHCOS cache tests plus an installer version check.
+
+   A normal run pushes the container image and creates/pushes the source tag
+   `vw/v<OCP_VERSION>-tp.<PATCH_REVISION>`. Never reuse a published revision.
+   If only an image push is authorized, use a separate build procedure instead
+   of running this helper unchanged.
+
+6. Use the published immutable image digest for
+   `ClusterDeployment.spec.provisioning.installerImageOverride`. Configure
+   `installerEnv` only for the optional behavior you need. Record the release,
+   upstream commit, carrier commits, image digest and validation results with
+   the build artifacts.
 
 ## Timeout overrides (opt-in)
 
-Full reference: **[installer-timeout-env.md](installer-timeout-env.md)** — phase order, value format, Hive YAML, and VW defaults for the **15m provisioning** wall and slow bootstrap API VIP / keepalived (~20m).
+See [installer-timeout-env.md](installer-timeout-env.md) for phase order, value
+format, Hive configuration and timeout guidance.
 
 Summary:
 
@@ -139,21 +194,50 @@ git remote add upstream https://github.com/openshift/installer.git
 From the **installer repo root** (not only this branch):
 
 ```bash
-/path/to/tooling/vw-sync.sh 4.21 --push
-/path/to/tooling/vw-sync.sh all --push
+/path/to/tooling/vw-sync.sh "<OCP_MINOR>"
+/path/to/tooling/vw-sync.sh all
 ```
 
-Stops on rebase conflict; never auto-resolves.
+Run this from a clean source checkout. The helper updates the upstream release
+branch and rebases the carrier commits onto it. It stops on conflicts without
+resolving them automatically. Add `--push` only when publishing Git branch updates
+is authorized; publishing a carrier is separate from publishing an installer image.
 
-## Z-stream builds
+## Private RHCOS OVA downloads (opt-in)
 
-`vw-build.sh` checks out the payload `installerCommit`, cherry-picks the VW patch from the matching carrier, tags `vw/v<version>-tp.<revision>`, builds, and pushes `openshift/installer:<version>-tp.<revision>`.
+Include the `VW-Patch: rhcos-download-auth` commit in the carrier for the selected
+OpenShift minor. The builder applies it through the same cherry-pick process as
+the timeout patch. Authentication is enabled at runtime through environment variables.
 
-Dry-run:
+Configure `platform.vsphere.clusterOSImage` with the OVA URL and `?sha256=...`,
+without a failure-domain template. Inject these environment variables through Hive:
 
-```bash
-./vw-build.sh --params-file installer-build-params.json --dry-run
-```
+| Variable | Source |
+|----------|--------|
+| `OPENSHIFT_INSTALL_RHCOS_DOWNLOAD_HOST` | OVA URL host, including an explicit port if present |
+| `OPENSHIFT_INSTALL_RHCOS_DOWNLOAD_USERNAME` | Kubernetes Secret key `username` |
+| `OPENSHIFT_INSTALL_RHCOS_DOWNLOAD_PASSWORD` | Kubernetes Secret key `password` (read-only token) |
+
+All three values are required when authentication is configured. Credentials are
+sent only to that HTTPS origin. Cross-origin and HTTP redirects are rejected;
+same-origin redirects retain the normal ten-redirect limit. Other hosts and
+unconfigured downloads remain anonymous. URL-embedded credentials are rejected
+before logging. SHA-256 verification and the existing retry behavior remain intact.
+The installer container must trust the repository's TLS chain; verification is
+not disabled, and Docker pull secrets do not authenticate Generic downloads.
+
+PCP's provisioning generator exposes this as `VSPHERE_CLUSTER_OS_IMAGE` and
+`RHCOS_DOWNLOAD_AUTH=true`, securely prompts for the token, and generates
+Vault/VSS plus Hive Secret references. No token belongs in `.env` or Git.
+Automatic import still needs vSphere import and MarkAsTemplate privileges.
+
+If the carrier commits exist only locally, select
+`--carrier-ref release-<OCP_MINOR>-timeout-patch`; the default continues to use the remote
+carrier. This option resolves the selected ref to a commit before use, and does
+not push the carrier branch.
+
+Publish the carrier branch separately when other build hosts need its commits.
+The sync helper rebases both labelled patch commits when the carrier includes authentication.
 
 ## Troubleshooting
 
@@ -167,8 +251,21 @@ Dry-run:
 - **`chmod: Operation not permitted` on runtime image:** the mirrored `openshift/release` base may run as non-root; `Containerfile.installer` uses `USER root` and `COPY --chmod=755`.
 - **Install still hits 15m:** confirm Hive provision pod env and image digest; search logs for `Using OPENSHIFT_INSTALL_`.
 
-## Adding OpenShift 4.24+
+## Add support for a new OpenShift minor
 
-1. Track `upstream/release-4.24`, create `release-4.24-timeout-patch` with the patch commit.
-2. Extend `VERSION_RE` in `vw-build.sh`.
-3. Run tests and first z-stream build.
+1. Track `upstream/release-<OCP_MINOR>` and prepare
+   `release-<OCP_MINOR>-timeout-patch` with the required labelled patch commits.
+   Adapt the patches to upstream changes and increment `VW-Patch-Revision`.
+2. Extend `VERSION_RE` and `default_builder_image()` in [vw-build.sh](vw-build.sh).
+   Choose a builder toolchain compatible with the new source tree's `go.mod`.
+3. Update the supported-minor cases and the `all` loop in [vw-sync.sh](vw-sync.sh).
+   If using automatic latest-release builds, also update the minor list in
+   [discover-latest-releases.sh](discover-latest-releases.sh), which feeds
+   [build-all-latest.sh](build-all-latest.sh).
+4. Extract parameters from a release in the new minor, check patch application
+   against its exact installer commit, run the relevant tests and build the image.
+   Verify the required CAPI assets and RHCOS stream metadata before publishing.
+
+For another z-stream release within an already supported minor, extract fresh
+parameters and use the same carrier. Check that its patches apply to the new
+payload commit; support for the minor does not guarantee a conflict-free build.
